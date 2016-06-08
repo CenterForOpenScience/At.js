@@ -1,9 +1,14 @@
-**An autocompletion library to autocomplete mentions, smileys etc. just like on Github!**  
+This [fork of ichord/At.js](https://github.com/CenterForOpenScience/At.js) contains a bug fix for @ mentions.
+If the PR [ichord/At.js#394](https://github.com/ichord/At.js/pull/394) is merged then the original repo will be used instead of our fork.
+
+- - -
+
+**An autocompletion library to autocomplete mentions, smileys etc. just like on Github!**
 [![Build Status](https://travis-ci.org/ichord/At.js.png)](https://travis-ci.org/ichord/At.js)
 
 #### Notice
 
-At.js now **depends on** [Caret.js](https://github.com/ichord/Caret.js).  
+At.js now **depends on** [Caret.js](https://github.com/ichord/Caret.js).
 Please read [**CHANGELOG.md**](CHANGELOG.md) for more details if you are going to update to new version.
 
 ### Demo
