@@ -1,6 +1,6 @@
 /**
- * at.js - 1.5.0
- * Copyright (c) 2016 chord.luo <chord.luo@gmail.com>;
+ * at.js - 1.5.4
+ * Copyright (c) 2017 chord.luo <chord.luo@gmail.com>;
  * Homepage: http://ichord.github.com/At.js
  * License: MIT
  */
@@ -22,8 +22,6 @@
 var DEFAULT_CALLBACKS, KEY_CODE;
 
 KEY_CODE = {
-  DOWN: 40,
-  UP: 38,
   ESC: 27,
   TAB: 9,
   ENTER: 13,
@@ -109,7 +107,7 @@ DEFAULT_CALLBACKS = {
     if (!query) {
       return li;
     }
-    regexp = new RegExp(">\\s*(\\w*?)(" + query.replace("+", "\\+") + ")(\\w*)\\s*<", 'ig');
+    regexp = new RegExp(">\\s*([^\<]*?)(" + query.replace("+", "\\+") + ")([^\<]*)\\s*<", 'ig');
     return li.replace(regexp, function(str, $1, $2, $3) {
       return '> ' + $1 + '<strong>' + $2 + '</strong>' + $3 + ' <';
     });
@@ -217,6 +215,9 @@ App = (function() {
     })(this)).on('compositionend', (function(_this) {
       return function(e) {
         _this.isComposing = false;
+        setTimeout(function(e) {
+          return _this.dispatch(e);
+        });
         return null;
       };
     })(this)).on('keyup.atwhoInner', (function(_this) {
@@ -572,7 +573,7 @@ TextareaController = (function(superClass) {
       iframe: this.app.iframe
     });
     subtext = content.slice(0, caretPos);
-    query = this.callbacks("matcher").call(this, this.at, subtext, this.getOpt('startWithSpace'));
+    query = this.callbacks("matcher").call(this, this.at, subtext, this.getOpt('startWithSpace'), this.getOpt("acceptSpaceBar"));
     isString = typeof query === 'string';
     if (isString && query.length < this.getOpt('minLen', 0)) {
       return;
@@ -659,7 +660,7 @@ EditableController = (function(superClass) {
     if (range == null) {
       range = this._getRange();
     }
-    if (!range) {
+    if (!(range && node)) {
       return;
     }
     node = $(node)[0];
@@ -762,19 +763,21 @@ EditableController = (function(superClass) {
     }
     _range = range.cloneRange();
     _range.setStart(range.startContainer, 0);
-    matched = this.callbacks("matcher").call(this, this.at, _range.toString(), this.getOpt('startWithSpace'));
+    matched = this.callbacks("matcher").call(this, this.at, _range.toString(), this.getOpt('startWithSpace'), this.getOpt("acceptSpaceBar"));
     isString = typeof matched === 'string';
     if ($query.length === 0 && isString && (index = range.startOffset - this.at.length - matched.length) >= 0) {
       range.setStart(range.startContainer, index);
       $query = $('<span/>', this.app.document).attr(this.getOpt("editableAtwhoQueryAttrs")).addClass('atwho-query');
       range.surroundContents($query.get(0));
       lastNode = $query.contents().last().get(0);
-      if (/firefox/i.test(navigator.userAgent)) {
-        range.setStart(lastNode, lastNode.length);
-        range.setEnd(lastNode, lastNode.length);
-        this._clearRange(range);
-      } else {
-        this._setRange('after', lastNode, range);
+      if (lastNode) {
+        if (/firefox/i.test(navigator.userAgent)) {
+          range.setStart(lastNode, lastNode.length);
+          range.setEnd(lastNode, lastNode.length);
+          this._clearRange(range);
+        } else {
+          this._setRange('after', lastNode, range);
+        }
       }
     }
     if (isString && matched.length < this.getOpt('minLen', 0)) {
@@ -806,6 +809,9 @@ EditableController = (function(superClass) {
   EditableController.prototype.rect = function() {
     var $iframe, iframeOffset, rect;
     rect = this.query.el.offset();
+    if (!(rect && this.query.el[0].getClientRects().length)) {
+      return;
+    }
     if (this.app.iframe && !this.app.iframeAsRoot) {
       iframeOffset = ($iframe = $(this.app.iframe)).offset();
       rect.left += iframeOffset.left - this.$inputor.scrollLeft();
@@ -816,17 +822,23 @@ EditableController = (function(superClass) {
   };
 
   EditableController.prototype.insert = function(content, $li) {
-    var data, range, suffix, suffixNode;
+    var data, overrides, range, suffix, suffixNode;
     if (!this.$inputor.is(':focus')) {
       this.$inputor.focus();
     }
+    overrides = this.getOpt('functionOverrides');
+    if (overrides.insert) {
+      return overrides.insert.call(this, content, $li);
+    }
     suffix = (suffix = this.getOpt('suffix')) === "" ? suffix : suffix || "\u00A0";
     data = $li.data('item-data');
-    this.query.el.removeClass('atwho-query').addClass('atwho-inserted').html(content).attr('data-atwho-at-query', "" + data['atwho-at'] + this.query.text);
+    this.query.el.removeClass('atwho-query').addClass('atwho-inserted').html(content).attr('data-atwho-at-query', "" + data['atwho-at'] + this.query.text).attr('contenteditable', "false");
     if (range = this._getRange()) {
-      range.setEndAfter(this.query.el[0]);
+      if (this.query.el.length) {
+        range.setEndAfter(this.query.el[0]);
+      }
       range.collapse(false);
-      range.insertNode(suffixNode = this.app.document.createTextNode("\u200D" + suffix));
+      range.insertNode(suffixNode = this.app.document.createTextNode("" + suffix));
       this._setRange('after', suffixNode, range);
     }
     if (!this.$inputor.is(':focus')) {
@@ -964,7 +976,7 @@ View = (function() {
   };
 
   View.prototype.visible = function() {
-    return this.$el.is(":visible");
+    return $.expr.filters.visible(this.$el[0]);
   };
 
   View.prototype.highlighted = function() {
@@ -1175,10 +1187,12 @@ $.fn.atwho["default"] = {
   insertTpl: "${atwho-at}${name}",
   headerTpl: null,
   callbacks: DEFAULT_CALLBACKS,
+  functionOverrides: {},
   searchKey: "name",
   suffix: void 0,
   hideWithoutSuffix: false,
   startWithSpace: true,
+  acceptSpaceBar: false,
   highlightFirst: true,
   limit: 5,
   maxLen: 20,
